@@ -40,12 +40,25 @@ body {
   gap: 16px;
 }
 
-/* 수면용 완전 암전 오버레이 (OLED #000000) */
+/* 수면용 완전 암전 오버레이 (OLED #000000 - 상단 다이나믹 아일랜드 여백까지 100% 차단) */
+body.is-blackout {
+  background-color: #000000 !important;
+  overflow: hidden !important;
+}
+
+body.is-blackout .app-container {
+  display: none !important;
+}
+
 .blackout-overlay {
   position: fixed;
-  inset: 0;
+  top: -100px;
+  left: 0;
+  right: 0;
+  bottom: -100px;
   width: 100vw;
-  height: 100vh;
+  height: calc(100vh + 200px);
+  padding: 100px 0;
   background-color: #000000 !important;
   z-index: 99999;
   display: flex;

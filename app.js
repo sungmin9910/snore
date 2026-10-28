@@ -222,13 +222,18 @@
     if (!isMonitoring) return;
     isBlackout = true;
 
+    // 0) 사용자 터치 제스처 컨텍스트에서 WakeLock 확실히 재획득 (iOS Safari 자동꺼짐 완벽 방지)
+    requestWakeLock();
+
     // 1) 화면 그래픽 렌더링(requestAnimationFrame) 즉시 100% 중단 -> GPU 발열 0%
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
     }
 
-    // 2) 암전 오버레이 표시
+    // 2) 상단 다이나믹 아일랜드 뒤쪽 여백까지 완벽히 가리기 위해 body 클래스 적용 및 최상단 이동
+    window.scrollTo(0, 0);
+    document.body.classList.add('is-blackout');
     el.blackoutOverlay.classList.remove('hidden');
     el.blackoutOverlay.classList.remove('pure-zero-pixel');
     updateBlackoutClock();
@@ -257,6 +262,7 @@
     isBlackout = false;
     if (pureBlackTimeout) clearTimeout(pureBlackTimeout);
     if (blackoutClockInterval) clearInterval(blackoutClockInterval);
+    document.body.classList.remove('is-blackout');
     el.blackoutOverlay.classList.add('hidden');
     el.blackoutOverlay.classList.remove('pure-zero-pixel');
 
