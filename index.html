@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="슬립센스" />
+  <meta name="theme-color" content="#000000" />
+  <title>슬립센스 (SleepSense) - 초저발열·원거리 수면 소리 감지</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- 수면용 완전 암전 오버레이 (OLED 0% 픽셀 발열 차단 모드) -->
+  <div id="blackoutOverlay" class="blackout-overlay hidden" role="button" tabindex="0" aria-label="수면 암전 화면. 두 번 터치하여 화면 켜기">
+    <div id="blackoutInfo" class="blackout-info">
+      <div id="blackoutClock" class="blackout-clock">00:00</div>
+      <div class="blackout-status">
+        <span class="pulse-dot"></span>
+        <span id="blackoutStatusText">초저발열 수면 감시 중 (GPU 렌더링 0%)</span>
+      </div>
+      <div id="blackoutClipCount" class="blackout-count">감지된 소리: 0건</div>
+      <p class="blackout-hint">화면을 빠르게 두 번 터치(더블탭)하면 화면이 켜집니다</p>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- 상단 헤더 -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">🌙</span>
+        <div>
+          <h1>슬립센스 <span class="badge-low-heat">초저발열·원거리</span></h1>
+          <p class="subtitle">코골이 · 잠꼬대 · 이갈이 스마트 조각 녹음기</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <span id="wakeLockBadge" class="status-pill status-off">화면유지 대기</span>
+        <span id="monitoringBadge" class="status-pill status-off">대기 중</span>
+      </div>
+    </header>
+
+    <!-- 메인 컨트롤 및 실시간 감지기 -->
+    <section class="card control-card">
+      <div class="card-header">
+        <h2>실시간 소리 감지 및 수면 제어</h2>
+        <span id="sessionTimer" class="session-timer">00:00:00</span>
+      </div>
+
+      <!-- 거리별 원터치 프리셋 -->
+      <div class="preset-group">
+        <span class="preset-label">📱 휴대폰 거리 설정 (마이크 증폭 + 민감도 자동 맞춤)</span>
+        <div class="preset-buttons">
+          <button type="button" class="preset-btn" data-preset="near">
+            <strong>근거리 (침대 위)</strong>
+            <span>증폭 2배 · 기본 감도</span>
+          </button>
+          <button type="button" class="preset-btn" data-preset="mid">
+            <strong>중거리 (협탁 1~2m)</strong>
+            <span>증폭 5배 · 고감도</span>
+          </button>
+          <button type="button" class="preset-btn active" data-preset="far">
+            <strong>원거리 (2m+ 초미세)</strong>
+            <span>증폭 10배 · 초고감도</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 실시간 데시벨 & 임계치 바 -->
+      <div class="meter-section">
+        <div class="meter-labels">
+          <span>현재 입력: <strong id="currentDbText">-60.0 dB</strong></span>
+          <span>배경 소음: <strong id="noiseFloorText">-52.0 dB</strong></span>
+          <span>녹음 기준: <strong id="thresholdDbText" class="highlight-text">-47.5 dB</strong></span>
+        </div>
+        <div class="meter-bar-container">
+          <div id="meterFill" class="meter-fill"></div>
+          <div id="noiseFloorMarker" class="meter-marker floor-marker" title="배경 소음선"></div>
+          <div id="thresholdMarker" class="meter-marker threshold-marker" title="녹음 시작 기준선"></div>
+        </div>
+        <div class="live-Detection-banner">
+          <span id="liveStateIndicator" class="state-tag state-idle">대기 중</span>
+          <span id="liveFreqInfo" class="freq-info">주파수 분석 대기 중 (암전 시 화면 렌더링 자동 중단)</span>
+        </div>
+      </div>
+
+      <!-- 주파수 스펙트럼 캔버스 (화면 켜져 있을 때만 작동, 암전 시 100% 정지) -->
+      <div class="canvas-wrapper">
+        <canvas id="spectrumCanvas" width="600" height="90"></canvas>
+        <div class="canvas-Bands-label">
+          <span>저음 (코골이 100~500Hz)</span>
+          <span>중음 (잠꼬대 300~3kHz)</span>
+          <span>고음 (이갈이/마찰 2k~6kHz)</span>
+        </div>
+      </div>
+
+      <!-- 세부 조절 슬라이더 -->
+      <div class="sliders-grid">
+        <div class="slider-item">
+          <div class="slider-top">
+            <label for="gainSlider">🔊 원거리 마이크 증폭 (Pre-Amp)</label>
+            <span id="gainValueText">10.0x (+20dB)</span>
+          </div>
+          <input type="range" id="gainSlider" min="1" max="15" step="0.5" value="10" />
+          <small class="slider-desc">휴대폰이 멀리 있을 때 작은 이갈이·잠꼬대 소리를 키워줍니다.</small>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-top">
+            <label for="deltaSlider">🎯 미세 소리 감지 민감도 (배경소음 대비)</label>
+            <span id="deltaValueText">+3.5 dB 변화 시 녹음</span>
+          </div>
+          <input type="range" id="deltaSlider" min="1.5" max="15" step="0.5" value="3.5" />
+          <small class="slider-desc">낮을수록 사소한 부스럭거림이나 미세한 소리도 즉시 잡아냅니다.</small>
+        </div>
+      </div>
+
+      <!-- 발열 차단 및 필터 옵션 -->
+      <div class="options-row">
+        <label class="toggle-option">
+          <input type="checkbox" id="highpassToggle" checked />
+          <span>에어컨·선풍기 저주파 웅웅거림 제거 (80Hz 고역통과 필터)</span>
+        </label>
+        <label class="toggle-option">
+          <input type="checkbox" id="pureBlackToggle" checked />
+          <span>발열 완전 차단: 수면 암전 시 글자까지 5초 후 100% 완전 소등 (OLED 픽셀 0개 점등)</span>
+        </label>
+        <label class="toggle-option">
+          <input type="checkbox" id="normalizeToggle" checked />
+          <span>작게 녹음된 먼 거리 소리 재생/저장 시 볼륨 자동 증폭</span>
+        </label>
+      </div>
+
+      <!-- 주요 실행 버튼 -->
+      <div class="action-buttons">
+        <button type="button" id="startBtn" class="btn btn-primary">
+          ▶ 수면 측정 시작
+        </button>
+        <button type="button" id="calibrateBtn" class="btn btn-secondary" title="현재 방 안의 조용한 상태를 기준으로 영점을 다시 잡습니다">
+          🎯 방 배경소음 영점 조절 (3초)
+        </button>
+        <button type="button" id="blackoutBtn" class="btn btn-dark" disabled>
+          🌑 수면용 암전 화면 켜기 (발열 0%)
+        </button>
+      </div>
+    </section>
+
+    <!-- 수면 분석 요약 & 시간대별 타임라인 -->
+    <section class="card summary-card">
+      <div class="card-header">
+        <h2>수면 소리 요약 & 타임라인</h2>
+        <button type="button" id="clearAllBtn" class="btn-text-danger">전체 기록 삭제</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">총 감지 횟수</span>
+          <strong id="statTotalCount" class="stat-value">0건</strong>
+        </div>
+        <div class="stat-box stat-snore">
+          <span class="stat-label">🐷 코골이 추정</span>
+          <strong id="statSnoreCount" class="stat-value">0건</strong>
+        </div>
+        <div class="stat-box stat-talk">
+          <span class="stat-label">💬 잠꼬대 추정</span>
+          <strong id="statTalkCount" class="stat-value">0건</strong>
+        </div>
+        <div class="stat-box stat-grind">
+          <span class="stat-label">😬 이갈이/마찰 추정</span>
+          <strong id="statGrindCount" class="stat-value">0건</strong>
+        </div>
+      </div>
+
+      <!-- 타임라인 시각화 -->
+      <div class="timeline-container">
+        <div class="timeline-header">
+          <span>시간대별 발생 분포 (클릭하여 해당 조각으로 이동)</span>
+          <span id="storageSavedText" class="saved-capacity">절약한 용량: 계산 중</span>
+        </div>
+        <div id="timelineTrack" class="timeline-track">
+          <div class="timeline-empty">측정된 소리 조각이 여기에 시간순으로 표시됩니다.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 녹음된 조각 리스트 -->
+    <section class="card clips-card">
+      <div class="card-header clips-header">
+        <h2>녹음된 소리 조각 목록</h2>
+        <div class="filter-tabs" role="tablist">
+          <button type="button" class="filter-tab active" data-filter="all">전체</button>
+          <button type="button" class="filter-tab" data-filter="snore">🐷 코골이</button>
+          <button type="button" class="filter-tab" data-filter="talk">💬 잠꼬대</button>
+          <button type="button" class="filter-tab" data-filter="grind">😬 이갈이</button>
+          <button type="button" class="filter-tab" data-filter="other">🔔 기타/미세음</button>
+        </div>
+      </div>
+
+      <div id="clipsList" class="clips-list">
+        <div class="empty-state">
+          <p>아직 녹음된 소리 조각이 없습니다.</p>
+          <small>[수면 측정 시작]을 누르고 말을 하거나 책상을 살짝 긁어 테스트해 보세요.</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- 발열 차단 원리 및 아이폰 사용 안내 -->
+    <section class="card guide-card">
+      <h2>💡 아이폰 발열 차단 원리 & 수면 시 팁</h2>
+      <ul class="guide-list">
+        <li><strong>발열 완전 차단 설계:</strong> 일반 웹앱은 초당 60번 화면을 다시 그려 발열이 생깁니다. 슬립센스는 <strong>[수면용 암전 화면]</strong> 진입 즉시 그래픽 렌더링(Canvas/GPU)을 <strong>100% 정지</strong>하고, 오디오 샘플링 레이트를 음성 분석에 최적화된 <code>16kHz</code> 저전력 모드로 구동하여 발열을 원천 차단합니다.</li>
+        <li><strong>OLED 픽셀 완전 소등:</strong> 암전 화면 진입 5초 후 안내 문구까지 완전히 사라져 아이폰 OLED 화면의 모든 픽셀이 물리적으로 꺼집니다.</li>
+        <li><strong>아이폰 주의사항:</strong> 아이폰 옆면의 <strong>전원(잠금) 버튼을 직접 누르면</strong> 애플 정책상 마이크가 꺼집니다. 반드시 전원 버튼을 누르지 말고 화면 내의 <strong>[🌑 수면용 암전 화면 켜기]</strong>를 누른 채로 주무세요.</li>
+      </ul>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

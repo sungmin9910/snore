@@ -1,0 +1,17 @@
+{
+  "name": "슬립센스 (SleepSense) - 초저발열 수면 소리 감지",
+  "short_name": "슬립센스",
+  "description": "아이폰 최적화 초저발열·원거리 고감도 코골이, 잠꼬대, 이갈이 감지 및 조각 녹음 웹앱",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23090d16'/><path d='M65 30A25 25 0 1 0 70 75 22 22 0 1 1 65 30z' fill='%236366f1'/><circle cx='72' cy='28' r='3' fill='%23a5b4fc'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
